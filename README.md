@@ -3,6 +3,10 @@
 Timeline and work division
 
 15th of May: data exploration deadline - Scott & Hatem
+  - Data Viz
+    - Plot histograms for each variable - Scott
+    - Plot correlation Matrix - Hatem
+  - Data prep - Hatem
 22nd of May: modelling deadline - Federico & Anwita
 29th of May: visualization + shiny - Alberto, Gerald & Louis
 --
