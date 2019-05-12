@@ -1,0 +1,27 @@
+---
+title: "FE & Modeling"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, echo=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+load_reqs <- function(reqs) {
+  for(pkg in reqs) {
+    if (!(pkg %in% installed.packages())) { install.packages(pkg) }
+    suppressPackageStartupMessages(library(pkg, character.only = T))
+  }
+}
+
+# ADD LIBRARIES HERE
+load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", "gridExtra", "grid", "cowplot"))
+```
+
+```{r echo=FALSE, warning=FALSE}
+train <- read.csv('../data/BankCamp_train.csv')
+submission <- read.csv('../data/BankCamp_test.csv')
+```
+
+### ...
