@@ -24,4 +24,18 @@ train <- read.csv('../data/BankCamp_train.csv')
 submission <- read.csv('../data/BankCamp_test.csv')
 ```
 
-### ...
+### ### List of Possible Variables
+
+Binning 
+1. age
+2. campaign
+3. job = reduce the number of categories. take the low numbers and check the proportion of yes and no and merge only those which have a similar distribution.
+4. poutcome = try binarizing it to success / no success
+
+### ### Baseline - Binary Logistic
+
+Decision Tree
+RF
+Gradient Boosting
+XGBoost
+AdaBoost
