@@ -7,6 +7,7 @@ output:
 
 ```{r setup, echo=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
 
 load_reqs <- function(reqs) {
   for(pkg in reqs) {
@@ -16,7 +17,8 @@ load_reqs <- function(reqs) {
 }
 
 # ADD LIBRARIES HERE
-load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", "gridExtra", "grid", "cowplot"))
+load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", "gridExtra", "grid", "cowplot",
+            "doParallel", "caret", "MLmetrics"))
 ```
 
 ```{r echo=FALSE, warning=FALSE}
@@ -24,7 +26,28 @@ train <- read.csv('../data/BankCamp_train.csv')
 submission <- read.csv('../data/BankCamp_test.csv')
 ```
 
-### ### List of Possible Variables
+```{r}
+train$label <- as.factor(ifelse(train$y == 'yes', 1, 0))
+train$y <- NULL
+
+test_proportion <- 0.2
+set.seed(7)
+train_index<-sample(nrow(train), floor(nrow(train)*(1-test_proportion)), replace = FALSE)
+
+df_train <- train[train_index,]
+df_test <- train[-train_index,]
+```
+
+
+#### Parallelize
+```{r}
+cl <- makePSOCKcluster(4) # I have 4 cores, this can be adapted
+registerDoParallel(cl)
+# All subsequent models are  run in parallel
+```
+
+
+### List of Possible Variables
 
 Binning 
 1. age
@@ -32,9 +55,127 @@ Binning
 3. job = reduce the number of categories. take the low numbers and check the proportion of yes and no and merge only those which have a similar distribution.
 4. poutcome = try binarizing it to success / no success
 
-### ### Baseline - Binary Logistic
 
+### Baseline - Binary Logistic
+```{r}
+# Define custom summary function so we can get recall as output always
+# Include Accuracy as well so that it does not optimise for recall
+# (and classify everything as positive)
+library(MLmetrics)
 
+recallSummary <- function (data,
+    lev = NULL,
+    model = NULL) {
+    c(Accuracy = MLmetrics::Accuracy(data$pred, data$obs),
+      recall = MLmetrics::Recall(data$obs, data$pred, positive = 1))
+}
+
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  savePredictions=TRUE,
+  summaryFunction = recallSummary
+)
+
+log <- train(label~.,
+              data = df_train,
+              method = 'glm',
+             family = "binomial",
+              trControl = ctrl)
+
+log
+```
+
+The model performs poorly in terms of recall, probably due to the unbalanced target variable. This will be tackled later
+
+### Preprocessing
+Proceed by grouping together levels of the job variable
+
+```{r}
+train_preproc <- train
+```
+
+```{r}
+levels(df_train$job)
+```
+
+```{r}
+train_preproc$job_binned <- car::recode(train_preproc$job, "c('retired', 'student') = 'rs'; c('blue-collar', 'entrepreneur')= 'be';
+       c('housemaid', 'services')= 'hs'; c('admin.', 'unknown')= 'au';
+       c('management', 'self-employed', 'technician', 'unemployed')= 'others'")
+
+train_preproc$job <- NULL
+```
+
+Bin age variable
+```{r}
+train_preproc$age_bin <- cut(train_preproc$age, breaks = c(-Inf, 20, 40, 60, Inf),
+                             labels = c('<20', "20-40", "40-60", ">60"))
+train_preproc$age <- NULL
+```
+
+Fit model again, adding in YeoJohnsson through preprocessing to fix skewness
+
+```{r}
+log_preproc <- train(label~.,
+              data = train_preproc,
+              method = 'glm',
+             family = "binomial",
+             preProcess = "YeoJohnson",
+              trControl = ctrl)
+
+log_preproc
+```
+
+The results remain mostly unchanged.
+
+### Resampling
+The target variable is highly unbalanced. We will therefore resample it in order try to make the model better capture the underrepresented class
+
+#### Undersampling
+```{r}
+ctrl_under <- trainControl(
+  method = "cv",
+  number = 5,
+  savePredictions=TRUE,
+  summaryFunction = recallSummary,
+  sampling = "down"
+)
+
+log_under <- train(label~.,
+              data = train_preproc,
+              method = 'glm',
+             family = "binomial",
+              trControl = ctrl_under)
+
+log_under
+```
+
+This is a game changer. By simply undersampling, we are able to highly improve recall.
+
+Let's try oversampling instead:
+#### Oversampling
+```{r}
+ctrl_up <- trainControl(
+  method = "cv",
+  number = 5,
+  savePredictions=TRUE,
+  summaryFunction = recallSummary,
+  sampling = "up"
+)
+
+log_up <- train(label~.,
+              data = train_preproc,
+              method = 'glm',
+             family = "binomial",
+              trControl = ctrl_up)
+
+log_up
+```
+
+Using oversampling, the results are even better
+
+Next: "smote" and "rose" for sampling
 
 Decision Tree
 RF
