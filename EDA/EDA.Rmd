@@ -16,7 +16,7 @@ load_reqs <- function(reqs) {
 }
 
 # ADD LIBRARIES HERE
-load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", "gridExtra", "grid", "cowplot"))
+load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", "gridExtra", "grid", "cowplot", "highcharter", "plotly", "ggpubr", "RColorBrewer"))
 ```
 
 ```{r echo=FALSE, warning=FALSE}
@@ -56,6 +56,15 @@ unique(train$y)
 
 #### Check for imbalance
 ```{r echo=TRUE, warning=FALSE}
+target_df <- data.frame(table(train$y))
+colnames(target_df) <- c("target", "count")
+ggplotly( 
+  ggplot(data=target_df, aes(x=target, y=count, fill=target)) +
+    geom_bar(position = 'dodge', stat='identity', alpha=0.5) +
+    scale_fill_manual("targe t", values = c("yes" = "dodgerblue", "no"="firebrick1")) +
+    theme_classic()
+)
+
 nrow(subset(train, y =='yes')) / nrow(train)
 ```
 
@@ -68,6 +77,8 @@ nrow(subset(train, y =='yes')) / nrow(train)
 
 numeric_vars <- unlist(lapply(train, is.numeric)) 
 histograms = list()
+densties = list()
+
 for (i in colnames(train[numeric_vars])){
   histograms[[i]] <-
     ggplot(
@@ -76,8 +87,22 @@ for (i in colnames(train[numeric_vars])){
       geom_histogram(bins = 35) +
       theme_bw(base_size = 13)+
       labs(fill = "Target")
+  
+  # print(
+  #     ggplotly(
+  #     ggdensity(train, x = i, add = "mean",
+  #     color = "y", fill = "y",
+  #     palette = c("#0073C2FF", "#FC4E07"))
+  #     )
+  # )
 }
 plot_grid(plotlist = histograms, ncol = 2)
+
+# Render the outputs
+# for(j in 1:length(histograms)){
+#   h <- histograms[[j]]
+#   print(ggplotly(h))
+# }
 ```
 
 **As shown from the hists, most of the numerical features are heavily skewed, and need to be normalized**
@@ -124,3 +149,64 @@ corrplot.mixed(
 **As shown from the result, there are no strong correlations between most of the pairs**
 
 **Except the one for pdays and previous = 0.54**
+
+
+```{r}
+
+data<- aggregate(train$age, by=list(job = train$job, target = train$y), FUN = mean)
+data <- dcast(data, job ~ target)
+
+rnames <- data[,1]
+mat_data <- data.matrix(data[,2:ncol(data)])
+
+rownames(mat_data) <- rnames
+my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+
+my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+col_breaks = c(seq(-1,0,length=100), # for red
+seq(0,0.8,length=100),  # for yellow
+seq(0.81,1,length=100)) # for green
+
+data
+heatmap(mat_data,
+  margins =c(12,12),     # widens margins around plot
+    col=my_palette,       # use on color palette defined earlier
+   breaks=col_breaks    # enable color transition at specified limits
+)
+
+```
+
+```{r}
+
+data<- aggregate(train$age, by=list(education = train$education, target = train$y), FUN = mean)
+data <- dcast(data, education ~ target)
+
+rnames <- data[,1]
+mat_data <- data.matrix(data[,2:ncol(data)])
+
+rownames(mat_data) <- rnames
+my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+
+my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+col_breaks = c(seq(-1,0,length=100), # for red
+seq(0,0.8,length=100),  # for yellow
+seq(0.81,1,length=100)) # for green
+
+data
+heatmap(mat_data,
+  margins =c(12,12),     # widens margins around plot
+    col=my_palette,       # use on color palette defined earlier
+   breaks=col_breaks    # enable color transition at specified limits
+)
+
+```
+
+```{r}
+# ggplotly(
+  ggplot(train, aes(x=previous, y=pdays, color=poutcome)) +
+    geom_point(aes(size = poutcome), alpha = 0.1 ) +
+    scale_size_discrete(range = c(3, 8))+
+    scale_colour_hue()+
+    theme_classic()
+# )
+```
