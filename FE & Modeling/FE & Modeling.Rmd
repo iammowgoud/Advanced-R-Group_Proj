@@ -17,8 +17,9 @@ load_reqs <- function(reqs) {
 }
 
 # ADD LIBRARIES HERE
-load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", "gridExtra", "grid", "cowplot",
-            "doParallel", "caret", "MLmetrics"))
+load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", 
+            "gridExtra", "grid", "cowplot", "doParallel", "caret", "MLmetrics", "DMwR",
+            "ROSE"))
 ```
 
 ```{r echo=FALSE, warning=FALSE}
@@ -27,9 +28,11 @@ submission <- read.csv('../data/BankCamp_test.csv')
 ```
 
 ```{r}
+# encode target variable as 1 and 0 and convert it to factor
 train$label <- as.factor(ifelse(train$y == 'yes', 1, 0))
 train$y <- NULL
 
+# split train data further into train and test (hold out)
 test_proportion <- 0.2
 set.seed(7)
 train_index<-sample(nrow(train), floor(nrow(train)*(1-test_proportion)), replace = FALSE)
@@ -43,7 +46,7 @@ df_test <- train[-train_index,]
 ```{r}
 cl <- makePSOCKcluster(4) # I have 4 cores, this can be adapted
 registerDoParallel(cl)
-# All subsequent models are  run in parallel
+# All subsequent models are run in parallel
 ```
 
 
@@ -61,7 +64,6 @@ Binning
 # Define custom summary function so we can get recall as output always
 # Include Accuracy as well so that it does not optimise for recall
 # (and classify everything as positive)
-library(MLmetrics)
 
 recallSummary <- function (data,
     lev = NULL,
@@ -70,30 +72,160 @@ recallSummary <- function (data,
       recall = MLmetrics::Recall(data$obs, data$pred, positive = 1))
 }
 
-ctrl <- trainControl(
-  method = "cv",
-  number = 5,
+ctrl_base <- trainControl(
+  method = "cv", # k-fold cross val
+  number = 10, # k = 5
   savePredictions=TRUE,
   summaryFunction = recallSummary
 )
 
-log <- train(label~.,
-              data = df_train,
-              method = 'glm',
+log <- train(label~.,   # removing duration as it is highly associated with target
+             data = df_train,
+             method = 'glm',
              family = "binomial",
-              trControl = ctrl)
+             trControl = ctrl_base)
 
 log
 ```
 
-The model performs poorly in terms of recall, probably due to the unbalanced target variable. This will be tackled later
+The model performs poorly in terms of recall, probably due to the unbalanced target variable. This can be tackled by either undersampling the prevalent class or oversampling the rare class or both. 
 
-### Preprocessing
+### Baseline with Resampling
+The target variable is highly unbalanced. We will therefore resample it in order try to make the model better capture the underrepresented class.
+
+```{r}
+# define basic train control object 
+ctrl <- trainControl(method = "cv",
+                     number = 10,
+                     savePredictions=TRUE,
+                     summaryFunction = recallSummary,
+                     sampling = "down")
+```
+
+#### Undersampling
+```{r}
+set.seed(7)
+log_under <- train(label~. ,
+                   data = df_train,
+                   method = 'glm',
+                   family = "binomial",
+                   trControl = ctrl)
+
+log_under
+```
+
+This is a game changer. By simply undersampling, we are able to highly improve recall.
+
+Let's try oversampling instead:
+#### Oversampling
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_up <- train(label~.,
+                data = df_train,
+                method = 'glm',
+                family = "binomial",
+                trControl = ctrl)
+
+log_up
+```
+
+Using oversampling, the results are even better. Recall goes marginally down (by a few decimal points) and accuracy goes slightly up.
+
+Next: "smote" and "rose" for sampling
+
+#### SMOTE
+```{r}
+ctrl$sampling <- "smote"
+
+set.seed(7)
+log_smt <- train(label~.,
+                 data = df_train,
+                 method = 'glm',
+                 family = "binomial",
+                 trControl = ctrl)
+
+log_smt
+```
+
+smote resampling takes accuracy up but brings down recall substantially. SMOTE stands for Synthetic Minority Oversampling Tecniques. It uses nearest neighbours algorithm to generate new and synthetic data. [1](https://towardsdatascience.com/methods-for-dealing-with-imbalanced-data-5b761be45a18)
+
+#### ROSE
+```{r}
+# ctrl$sampling <- "rose"
+# 
+# set.seed(7)
+# log_rose <- train(label~.,
+#                   data = df_train,
+#                   method = 'glm',
+#                   family = "binomial",
+#                   trControl = ctrl)
+# 
+# log_rose
+```
+
+### Summary of all resampling results
+
+```{r}
+resample_models <- list(baseline = log,
+                        undersampling = log_under,
+                        oversampling = log_up,
+                        SMOTE = log_smt
+                        # ,ROSE = log_rose
+                        )
+
+# do a resampling on the models and generate distribution of accuracy and recall metrics
+resampling <- resamples(resample_models)
+summ1 <- summary(resampling)
+summ1
+
+# or just print the train results
+summ2 <- NULL
+for (i in 1:length(resample_models)) {
+  res <- resample_models[[i]]$results[1:3]
+  summ2 <- rbind(summ2, res)
+}
+summ2$parameter <- names(resample_models)
+summ2
+```
+
+
+### Feature Preprocessing
+Now that we have established that resampling improves model results significantly, we will keep it as the base and move to feature selection and feature engineering. We use oversampling method. 
+
+#### Age as a categorical variable
 Proceed by grouping together levels of the job variable
 
 ```{r}
+# create a new preprocessed dataset
 train_preproc <- train
+
+# bin age variable
+train_preproc$age_bin <- cut(train_preproc$age, breaks = c(-Inf, 20, 40, 60, Inf),
+                             labels = c('<20', "20-40", "40-60", ">60"))
+train_preproc$age <- NULL
 ```
+
+```{r}
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
+
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_agebin <- train(label~.,
+                    data = df_train_preproc,
+                    method = 'glm',
+                    family = "binomial",
+                    trControl = ctrl)
+
+log_agebin
+```
+
+
 
 ```{r}
 levels(df_train$job)
@@ -107,12 +239,6 @@ train_preproc$job_binned <- car::recode(train_preproc$job, "c('retired', 'studen
 train_preproc$job <- NULL
 ```
 
-Bin age variable
-```{r}
-train_preproc$age_bin <- cut(train_preproc$age, breaks = c(-Inf, 20, 40, 60, Inf),
-                             labels = c('<20', "20-40", "40-60", ">60"))
-train_preproc$age <- NULL
-```
 
 Fit model again, adding in YeoJohnsson through preprocessing to fix skewness
 
@@ -129,53 +255,6 @@ log_preproc
 
 The results remain mostly unchanged.
 
-### Resampling
-The target variable is highly unbalanced. We will therefore resample it in order try to make the model better capture the underrepresented class
-
-#### Undersampling
-```{r}
-ctrl_under <- trainControl(
-  method = "cv",
-  number = 5,
-  savePredictions=TRUE,
-  summaryFunction = recallSummary,
-  sampling = "down"
-)
-
-log_under <- train(label~.,
-              data = train_preproc,
-              method = 'glm',
-             family = "binomial",
-              trControl = ctrl_under)
-
-log_under
-```
-
-This is a game changer. By simply undersampling, we are able to highly improve recall.
-
-Let's try oversampling instead:
-#### Oversampling
-```{r}
-ctrl_up <- trainControl(
-  method = "cv",
-  number = 5,
-  savePredictions=TRUE,
-  summaryFunction = recallSummary,
-  sampling = "up"
-)
-
-log_up <- train(label~.,
-              data = train_preproc,
-              method = 'glm',
-             family = "binomial",
-              trControl = ctrl_up)
-
-log_up
-```
-
-Using oversampling, the results are even better
-
-Next: "smote" and "rose" for sampling
 
 Decision Tree
 RF
