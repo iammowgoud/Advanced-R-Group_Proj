@@ -27,6 +27,129 @@ train <- read.csv('../data/BankCamp_train.csv')
 submission <- read.csv('../data/BankCamp_test.csv')
 ```
 
+### Visualization
+
+#### Check if there are any missing values in the training set and the submission set
+
+```{r echo=TRUE, warning=FALSE}
+any(is.na(train))
+any(is.na(submission))
+```
+
+**As both return FALSE, there are no missing values**
+
+***
+
+#### Check for the structure of the dataset
+```{r echo=TRUE, warning=FALSE}
+glimpse(train)
+glimpse(submission)
+```
+
+**Comparing to training set with the submission set, we can tell the target variable is y**
+
+***
+
+#### Check for the factor levels of y
+```{r echo=TRUE, warning=FALSE}
+unique(train$y)
+```
+
+**As shown, it returns only yes and no, so it's a binary classification problem**
+
+***
+
+#### Check for imbalance
+```{r echo=TRUE, warning=FALSE}
+nrow(subset(train, y =='yes')) / nrow(train)
+```
+
+**11% ,  no over/under-sampling needed**
+
+***
+
+#### Numerical Features
+```{r echo=FALSE, fig.height=6, warning=FALSE}
+
+numeric_vars <- unlist(lapply(train, is.numeric)) 
+histograms = list()
+for (i in colnames(train[numeric_vars])){
+  histograms[[i]] <-
+    ggplot(
+      train[numeric_vars],
+      aes_string(x=i,fill=train$y)) +
+      geom_histogram(bins = 35) +
+      theme_bw(base_size = 13)+
+      labs(fill = "Target")
+}
+plot_grid(plotlist = histograms, ncol = 2)
+```
+
+**As shown from the hists, most of the numerical features are heavily skewed, and need to be normalized**
+
+***
+
+#### Categorical Features
+```{r echo=FALSE, fig.height=14, warning=FALSE}
+
+cat_vars <- unlist(lapply(train, is.factor)) 
+barPlots = list()
+for (i in colnames(train[cat_vars])){
+  if(i != 'y') {
+      barPlots[[i]] <-
+        ggplot(
+          train[cat_vars],
+          aes_string(x=i,fill=train$y)) +
+          geom_bar() +
+          theme_bw(base_size = 13)+
+          labs(fill = "Target")
+  }
+}
+plot_grid(plotlist = barPlots, ncol = 1)
+```
+
+**As shown from the hists, most of the numerical features are heavily skewed, and need to be normalized**
+
+***
+
+#### Correlation between two numerical features
+
+```{r echo=TRUE, warning=FALSE}
+train_num <- dplyr::select_if(train, is.numeric)
+res <- cor(train_num)
+corrplot.mixed(
+          res,
+          upper="circle",
+          lower="number",
+          tl.col = "black",
+          number.cex = .8,
+          tl.cex=.8)
+```
+
+**As shown from the result, there are no strong correlations between most of the pairs**
+
+**Except the one for pdays and previous = 0.54**
+
+#### numerical features with target
+```{r}
+numeric_vars <- unlist(lapply(train, is.numeric)) 
+histograms = list()
+for (i in colnames(train[numeric_vars])){
+  histograms[[i]] <-
+    ggplot(
+      train[numeric_vars],
+      aes_string(x=i,fill=train$y)) +
+      geom_density(alpha = 0.25) +
+      theme_minimal() +
+      labs(fill = "Target")
+}
+plot_grid(plotlist = histograms, ncol = 2)
+
+```
+
+
+#### Modeling Preparation
+
 ```{r}
 # encode target variable as 1 and 0 and convert it to factor
 train$label <- as.factor(ifelse(train$y == 'yes', 1, 0))
@@ -40,6 +163,7 @@ train_index<-sample(nrow(train), floor(nrow(train)*(1-test_proportion)), replace
 df_train <- train[train_index,]
 df_test <- train[-train_index,]
 ```
+
 
 
 #### Parallelize
