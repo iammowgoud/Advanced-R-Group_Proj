@@ -194,6 +194,14 @@ summ2
 ### Feature Preprocessing
 Now that we have established that resampling improves model results significantly, we will keep it as the base and move to feature selection and feature engineering. We use oversampling method. 
 
+#### Day as a categorical variable  
+There is no numerical relevance to day of the month. Hence, it is converted as a factor. 
+
+```{r}
+train$day <- as.factor(train$day)
+```
+
+
 #### Age as a categorical variable
 Proceed by grouping together levels of the job variable
 
@@ -225,35 +233,124 @@ log_agebin <- train(label~.,
 log_agebin
 ```
 
-
-
 ```{r}
-levels(df_train$job)
+# update pipeline
+summ2 <- rbind(summ2, log_agebin$results[1:3])
+summ2$parameter[nrow(summ2)] <- "agebin"
+summ2
 ```
 
+
+The results after binning age improve slightly. We now move on to the next variable, jobs. 
+
+#### Reducing the number of categories in job
+
 ```{r}
-train_preproc$job_binned <- car::recode(train_preproc$job, "c('retired', 'student') = 'rs'; c('blue-collar', 'entrepreneur')= 'be';
-       c('housemaid', 'services')= 'hs'; c('admin.', 'unknown')= 'au';
-       c('management', 'self-employed', 'technician', 'unemployed')= 'others'")
+levels(df_train_preproc$job)
+```
+
+Job currently has 12 different levels, but the proportion of observations in each of them is not uniform. We try merging some levels together to see if it has any impact on the model performance. We realise that reducing the levels will result in loss of granularity but it is assumed that strategies are not going to be planned at such minute levels and a general idea of customer's occupation would be enough.    
+```{r}
+train_preproc$job_binned <- car::recode(train_preproc$job, "c('retired', 'student') = 'rs';
+                                        c('blue-collar', 'entrepreneur')= 'be';
+                                        c('housemaid', 'services')= 'hs'; 
+                                        c('admin.', 'unknown')= 'au';
+                        c('management', 'self-employed','technician', 'unemployed') = 'others'")
+train_preproc$job_binned <- factor(train_preproc$job_binned)
 
 train_preproc$job <- NULL
 ```
 
-
-Fit model again, adding in YeoJohnsson through preprocessing to fix skewness
+```{r}
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
 
 ```{r}
-log_preproc <- train(label~.,
-              data = train_preproc,
-              method = 'glm',
-             family = "binomial",
-             preProcess = "YeoJohnson",
-              trControl = ctrl)
+ctrl$sampling <- "up"
 
-log_preproc
+set.seed(7)
+log_agejobbin <- train(label~.,
+                    data = df_train_preproc,
+                    method = 'glm',
+                    family = "binomial",
+                    trControl = ctrl)
+
+log_agejobbin
+```
+
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_agejobbin$results[1:3])
+summ2$parameter[nrow(summ2)] <- "agejobbin"
+summ2
+```
+
+The model recall decreases marginally. However, we can still go ahead with these two new features.  
+
+#### Converting 'balance' to categorical 
+This variable is highly skewed with negative values and majority 0. There are 3052 negative values and 2799 0s. There are two ways of addressing this problem. Either transform the variable using YeoJohnsson method which takes into account both negative and positive values unlike the Box-Cox method or to convert them to categorical variables. We start with the second option. 
+
+```{r}
+train_preproc$balance_bin <- cut(train_preproc$balance, 
+                             breaks = c(-Inf, 0, 500, 1000, 5000, Inf),
+                             labels = c("<=0", "1-500", "501-1000", "1001-5000", ">5000"))
+
+
+train_preproc$balance <- NULL
+```
+
+```{r}
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
+
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_bal <- train(label~.,
+                 data = df_train_preproc,
+                 method = 'glm',
+                 family = "binomial",
+                 trControl = ctrl)
+
+log_bal
+```
+
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_bal$results[1:3])
+summ2$parameter[nrow(summ2)] <- "bal"
+summ2
+```
+
+Binning balance improves accuracy and recall.  
+
+#### Redesigning how numeric variables are modelled
+
+We now fit the model again, however, adding in YeoJohnsson through preprocessing to fix skewness in all numeric variables. No other preprocessing is done. 
+
+```{r}
+ctrl$sampling <- "up"
+
+log_yj <- train(label~.,
+                data = df_train,
+                method = 'glm',
+                family = "binomial",
+                preProcess = "YeoJohnson",
+                trControl = ctrl)
+
+log_yj
 ```
 
 The results remain mostly unchanged.
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_yj$results[1:3])
+summ2$parameter[nrow(summ2)] <- "Yeo-Johnson"
+summ2
+```
 
 
 Decision Tree
