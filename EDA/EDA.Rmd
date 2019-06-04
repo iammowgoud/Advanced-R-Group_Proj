@@ -204,8 +204,8 @@ heatmap(mat_data,
 ```{r}
 # ggplotly(
   ggplot(train, aes(x=previous, y=pdays, color=poutcome)) +
-    geom_point(aes(size = poutcome), alpha = 0.1 ) +
-    scale_size_discrete(range = c(3, 8))+
+    geom_point(aes(size = poutcome), alpha = 0.15 ) +
+    scale_size_discrete(range = c(3, 7))+
     scale_colour_hue()+
     theme_classic()
 # )
