@@ -1,0 +1,584 @@
+---
+title: "FE & Modeling"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, echo=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#rm(list=ls())
+
+load_reqs <- function(reqs) {
+  for(pkg in reqs) {
+    if (!(pkg %in% installed.packages())) { install.packages(pkg) }
+    suppressPackageStartupMessages(library(pkg, character.only = T))
+  }
+}
+
+# ADD LIBRARIES HERE
+load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", 
+            "gridExtra", "grid", "cowplot", "caret", "MLmetrics", "DMwR",
+            "ROSE", "ranger"))
+```
+
+```{r echo=FALSE, warning=FALSE}
+train <- read.csv('../data/BankCamp_train.csv')
+submission <- read.csv('../data/BankCamp_test.csv')
+```
+
+### Visualization
+
+#### Check if there are any missing values in the training set and the submission set
+
+```{r echo=TRUE, warning=FALSE}
+any(is.na(train))
+any(is.na(submission))
+```
+
+**As both return FALSE, there are no missing values**
+
+***
+
+#### Check for the structure of the dataset
+```{r echo=TRUE, warning=FALSE}
+glimpse(train)
+glimpse(submission)
+```
+
+**Comparing to training set with the submission set, we can tell the target variable is y**
+
+***
+
+#### Check for the factor levels of y
+```{r echo=TRUE, warning=FALSE}
+unique(train$y)
+```
+
+**As shown, it returns only yes and no, so it's a binary classification problem**
+
+***
+
+#### Check for imbalance
+```{r echo=TRUE, warning=FALSE}
+nrow(subset(train, y =='yes')) / nrow(train)
+```
+
+**11% ,  no over/under-sampling needed**
+
+***
+
+#### Numerical Features
+```{r echo=FALSE, fig.height=6, warning=FALSE}
+
+numeric_vars <- unlist(lapply(train, is.numeric)) 
+histograms = list()
+for (i in colnames(train[numeric_vars])){
+  histograms[[i]] <-
+    ggplot(
+      train[numeric_vars],
+      aes_string(x=i,fill=train$y)) +
+      geom_histogram(bins = 35) +
+      theme_bw(base_size = 13)+
+      labs(fill = "Target")
+}
+plot_grid(plotlist = histograms, ncol = 2)
+```
+
+**As shown from the hists, most of the numerical features are heavily skewed, and need to be normalized**
+
+***
+
+#### Categorical Features
+```{r echo=FALSE, fig.height=14, warning=FALSE}
+
+cat_vars <- unlist(lapply(train, is.factor)) 
+barPlots = list()
+for (i in colnames(train[cat_vars])){
+  if(i != 'y') {
+      barPlots[[i]] <-
+        ggplot(
+          train[cat_vars],
+          aes_string(x=i,fill=train$y)) +
+          geom_bar() +
+          theme_bw(base_size = 13)+
+          labs(fill = "Target")
+  }
+}
+plot_grid(plotlist = barPlots, ncol = 1)
+```
+
+**As shown from the hists, most of the numerical features are heavily skewed, and need to be normalized**
+
+***
+
+#### Correlation between two numerical features
+
+```{r echo=TRUE, warning=FALSE}
+train_num <- dplyr::select_if(train, is.numeric)
+res <- cor(train_num)
+corrplot.mixed(
+          res,
+          upper="circle",
+          lower="number",
+          tl.col = "black",
+          number.cex = .8,
+          tl.cex=.8)
+```
+
+**As shown from the result, there are no strong correlations between most of the pairs**
+
+**Except the one for pdays and previous = 0.54**
+
+#### numerical features with target
+```{r}
+numeric_vars <- unlist(lapply(train, is.numeric)) 
+histograms = list()
+for (i in colnames(train[numeric_vars])){
+  histograms[[i]] <-
+    ggplot(
+      train[numeric_vars],
+      aes_string(x=i,fill=train$y)) +
+      geom_density(alpha = 0.25) +
+      theme_minimal() +
+      labs(fill = "Target")
+}
+plot_grid(plotlist = histograms, ncol = 2)
+
+```
+
+
+#### Modeling Preparation
+
+```{r}
+# encode target variable as 1 and 0 and convert it to factor
+train$label <- as.factor(ifelse(train$y == 'yes', 1, 0))
+train$y <- NULL
+
+# split train data further into train and test (hold out)
+test_proportion <- 0.2
+set.seed(7)
+train_index<-sample(nrow(train), floor(nrow(train)*(1-test_proportion)), replace = FALSE)
+
+df_train <- train[train_index,]
+df_test <- train[-train_index,]
+```
+
+
+
+#### Parallelize
+```{r}
+# cl <- makePSOCKcluster(4) # I have 4 cores, this can be adapted
+# registerDoParallel(cl)
+# All subsequent models are run in parallel
+```
+
+
+### List of Possible Variables
+
+Binning 
+1. age
+2. campaign
+3. job = reduce the number of categories. take the low numbers and check the proportion of yes and no and merge only those which have a similar distribution.
+4. poutcome = try binarizing it to success / no success
+
+
+### Baseline - Binary Logistic
+```{r}
+# Define custom summary function so we can get recall as output always
+# Include Accuracy as well so that it does not optimise for recall
+# (and classify everything as positive)
+
+recallSummary <- function (data,
+    lev = NULL,
+    model = NULL) {
+    c(Accuracy = MLmetrics::Accuracy(data$pred, data$obs),
+      recall = MLmetrics::Recall(data$obs, data$pred, positive = 1))
+}
+
+ctrl_base <- trainControl(
+  method = "cv", # k-fold cross val
+  number = 10, # k = 5
+  savePredictions=TRUE,
+  summaryFunction = recallSummary
+)
+
+log <- train(label~.,   # removing duration as it is highly associated with target
+             data = df_train,
+             method = 'glm',
+             family = "binomial",
+             trControl = ctrl_base)
+
+log
+```
+
+The model performs poorly in terms of recall, probably due to the unbalanced target variable. This can be tackled by either undersampling the prevalent class or oversampling the rare class or both. 
+
+### Baseline with Resampling
+The target variable is highly unbalanced. We will therefore resample it in order try to make the model better capture the underrepresented class.
+
+```{r}
+# define basic train control object 
+ctrl <- trainControl(method = "cv",
+                     number = 10,
+                     savePredictions=TRUE,
+                     summaryFunction = recallSummary,
+                     sampling = "down")
+```
+
+#### Undersampling
+```{r}
+set.seed(7)
+log_under <- train(label~. ,
+                   data = df_train,
+                   method = 'glm',
+                   family = "binomial",
+                   trControl = ctrl)
+
+log_under
+```
+
+This is a game changer. By simply undersampling, we are able to highly improve recall.
+
+Let's try oversampling instead:
+#### Oversampling
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_up <- train(label~.,
+                data = df_train,
+                method = 'glm',
+                family = "binomial",
+                trControl = ctrl)
+
+log_up
+```
+
+Using oversampling, the results are even better. Recall goes marginally down (by a few decimal points) and accuracy goes slightly up.
+
+Next: "smote" and "rose" for sampling
+
+#### SMOTE
+```{r}
+ctrl$sampling <- "smote"
+
+set.seed(7)
+log_smt <- train(label~.,
+                 data = df_train,
+                 method = 'glm',
+                 family = "binomial",
+                 trControl = ctrl)
+
+log_smt
+```
+
+smote resampling takes accuracy up but brings down recall substantially. SMOTE stands for Synthetic Minority Oversampling Tecniques. It uses nearest neighbours algorithm to generate new and synthetic data. [1](https://towardsdatascience.com/methods-for-dealing-with-imbalanced-data-5b761be45a18)
+
+#### ROSE
+```{r}
+# ctrl$sampling <- "rose"
+# 
+# set.seed(7)
+# log_rose <- train(label~.,
+#                   data = df_train,
+#                   method = 'glm',
+#                   family = "binomial",
+#                   trControl = ctrl)
+# 
+# log_rose
+```
+
+### Summary of all resampling results
+
+```{r}
+resample_models <- list(baseline = log,
+                        undersampling = log_under,
+                        oversampling = log_up,
+                        SMOTE = log_smt
+                        # ,ROSE = log_rose
+                        )
+
+# do a resampling on the models and generate distribution of accuracy and recall metrics
+resampling <- resamples(resample_models)
+summ1 <- summary(resampling)
+summ1
+
+# or just print the train results
+summ2 <- NULL
+for (i in 1:length(resample_models)) {
+  res <- resample_models[[i]]$results[1:3]
+  summ2 <- rbind(summ2, res)
+}
+summ2$parameter <- names(resample_models)
+summ2
+```
+
+
+### Feature Preprocessing
+Now that we have established that resampling improves model results significantly, we will keep it as the base and move to feature selection and feature engineering. We use oversampling method. 
+
+#### Day as a categorical variable  
+There is no numerical relevance to day of the month. Hence, it is converted as a factor. 
+
+```{r}
+train$day <- as.factor(train$day)
+```
+
+
+#### Age as a categorical variable
+Proceed by grouping together levels of the job variable
+
+```{r}
+# create a new preprocessed dataset
+train_preproc <- train
+
+# bin age variable
+train_preproc$age_bin <- cut(train_preproc$age, breaks = c(-Inf, 20, 40, 60, Inf),
+                             labels = c('<20', "20-40", "40-60", ">60"))
+train_preproc$age <- NULL
+```
+
+```{r}
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
+
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_agebin <- train(label~.,
+                    data = df_train_preproc,
+                    method = 'glm',
+                    family = "binomial",
+                    trControl = ctrl)
+
+log_agebin
+```
+
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_agebin$results[1:3])
+summ2$parameter[nrow(summ2)] <- "agebin"
+summ2
+```
+
+
+The results after binning age improve slightly. We now move on to the next variable, jobs. 
+
+#### Reducing the number of categories in job
+
+```{r}
+levels(df_train_preproc$job)
+```
+
+Job currently has 12 different levels, but the proportion of observations in each of them is not uniform. We try merging some levels together to see if it has any impact on the model performance. We realise that reducing the levels will result in loss of granularity but it is assumed that strategies are not going to be planned at such minute levels and a general idea of customer's occupation would be enough.    
+```{r}
+train_preproc$job_binned <- car::recode(train_preproc$job, "c('retired', 'student') = 'rs';
+                                        c('blue-collar', 'entrepreneur')= 'be';
+                                        c('housemaid', 'services')= 'hs'; 
+                                        c('admin.', 'unknown')= 'au';
+                        c('management', 'self-employed','technician', 'unemployed') = 'others'")
+train_preproc$job_binned <- factor(train_preproc$job_binned)
+
+train_preproc$job <- NULL
+```
+
+```{r}
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
+
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_agejobbin <- train(label~.,
+                    data = df_train_preproc,
+                    method = 'glm',
+                    family = "binomial",
+                    trControl = ctrl)
+
+log_agejobbin
+```
+
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_agejobbin$results[1:3])
+summ2$parameter[nrow(summ2)] <- "agejobbin"
+summ2
+```
+
+The model recall decreases marginally. However, we can still go ahead with these two new features.  
+
+#### Converting 'balance' to categorical 
+This variable is highly skewed with negative values and majority 0. There are 3052 negative values and 2799 0s. There are two ways of addressing this problem. Either transform the variable using YeoJohnsson method which takes into account both negative and positive values unlike the Box-Cox method or to convert them to categorical variables. We start with the second option. 
+
+```{r}
+train_preproc$balance_bin <- cut(train_preproc$balance, 
+                             breaks = c(-Inf, 0, 500, 1000, 5000, Inf),
+                             labels = c("<=0", "1-500", "501-1000", "1001-5000", ">5000"))
+
+
+train_preproc$balance <- NULL
+```
+
+```{r}
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
+
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_bal <- train(label~.,
+                 data = df_train_preproc,
+                 method = 'glm',
+                 family = "binomial",
+                 trControl = ctrl)
+
+log_bal
+```
+
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_bal$results[1:3])
+summ2$parameter[nrow(summ2)] <- "bal"
+summ2
+```
+
+Binning balance improves accuracy and recall.  
+
+#### Redesigning how numeric variables are modelled
+
+We now fit the model again, however, adding in YeoJohnsson through preprocessing to fix skewness in all numeric variables. No other preprocessing is done. 
+
+```{r}
+ctrl$sampling <- "up"
+
+log_yj <- train(label~.,
+                data = df_train,
+                method = 'glm',
+                family = "binomial",
+                preProcess = "YeoJohnson",
+                trControl = ctrl)
+
+log_yj
+```
+
+The results remain mostly unchanged.
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_yj$results[1:3])
+summ2$parameter[nrow(summ2)] <- "Yeo-Johnson"
+summ2
+```
+
+#### Reducing the levels for variables days and month
+As seen earlier, days and month are considered as factor variables. However, this means that there are 30+11 dummy variables in the model. We try our next model iterations by reducing days to weeks (1-7=week1, 7-14=week2, etc.) and months to quarters. 
+
+```{r}
+train_preproc$day_bin <- cut(as.numeric(train_preproc$day), 
+                             breaks = c(0, 7, 14, 21, 31),
+                             labels = c("week1", "week2", "week3", "week4"))
+
+
+train_preproc$day <- NULL
+
+train_preproc$month_bin <- factor(car::recode(train_preproc$month, "c('jan','feb','mar') = 'Q1';
+                                        c('apr', 'may', 'jun')= 'Q2';
+                                        c('jul', 'aug', 'sep')= 'Q3'; 
+                                        c('oct', 'nov', 'dec')= 'Q4'"))
+
+train_preproc$month <- NULL
+
+
+```
+
+```{r}
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
+
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_finalfe1 <- train(label~.,
+                   data = df_train_preproc,
+                   method = 'glm',
+                   family = "binomial",
+                   trControl = ctrl)
+
+log_finalfe1
+```
+
+```{r}
+# update pipeline
+summ2 <- rbind(summ2, log_finalfe1$results[1:3])
+summ2$parameter[nrow(summ2)] <- "random binning"
+summ2
+```
+
+
+### Random Forests
+
+```{r}
+ctrl$sampling <- "up"
+
+
+tuneGrid <- data.table(expand.grid(mtry=c(5,15), splitrule = "gini",
+                                   min.node.size=c(2,5,10)))
+
+set.seed(7)
+log_rf <- train(label~.,
+                 data = df_train_preproc,
+                 method = 'ranger',
+                 num.trees = 50, tuneGrid = tuneGrid,
+                 trControl = ctrl, metric = "recall"
+)
+
+
+log_rf
+```
+
+# Trial - Random Forest on entire train dataset
+
+```{r}
+set.seed(7)
+train_rf <- train(label~.,
+                 data = train_preproc,
+                 method = 'ranger',
+                 num.trees = 50, tuneGrid = tuneGrid,
+                 trControl = ctrl, metric = "recall"
+)
+
+
+train_rf
+
+```
+
+
+Since random forest does not seem to improve model performance to a decent level, we try other methods. 
+
+
+### Gradient Boosting
+
+```{r}
+ctrl$sampling <- "up"
+
+set.seed(7)
+log_xgb <- train(label~.,
+                 data = df_train_preproc,
+                 method = 'xgbLinear',
+                 trControl = ctrl, metric = "recall"
+)
+
+
+log_xgb
+```
+
+
+AdaBoost

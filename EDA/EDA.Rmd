@@ -160,9 +160,9 @@ rnames <- data[,1]
 mat_data <- data.matrix(data[,2:ncol(data)])
 
 rownames(mat_data) <- rnames
-my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+my_palette <- colorRampPalette(c("red", "yellow", "green",  "black"))(n = 299)
 
-my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+my_palette <- colorRampPalette(c("red", "yellow", "green", "black"))(n = 299)
 col_breaks = c(seq(-1,0,length=100), # for red
 seq(0,0.8,length=100),  # for yellow
 seq(0.81,1,length=100)) # for green
