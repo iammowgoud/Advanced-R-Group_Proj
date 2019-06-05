@@ -19,7 +19,7 @@ load_reqs <- function(reqs) {
 # ADD LIBRARIES HERE
 load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", 
             "gridExtra", "grid", "cowplot", "doParallel", "caret", "MLmetrics", "DMwR",
-            "ROSE", "ranger", "xgboost"))
+            "ROSE", "ranger", "xgboost", "deepboost"))
 ```
 
 ```{r echo=FALSE, warning=FALSE}
@@ -550,25 +550,6 @@ summ2$parameter[nrow(summ2)] <- "Logarithm"
 summ2
 ```
 
-### Exclude vars
-```{r}
-# train_log$day <- NULL
-# 
-# df_train_preproc <- train_log[train_index,]
-# df_test_preproc <- train_log[-train_index,]
-```
-
-```{r}
-# log_no_day <- train(label~.,
-#                 data = df_train_preproc,
-#                 method = 'glm',
-#                 family = "binomial",
-#                 trControl = ctrl)
-# 
-# print(log_no_day)
-```
-
-
 #### Parallelize
 ```{r}
 cl <- makePSOCKcluster(4) # I have 4 cores, this can be adapted
@@ -580,12 +561,17 @@ registerDoParallel(cl)
 Different models & hyperparameter tuning
 
 ```{r}
+ctrl <- trainControl(method = "cv",
+                     number = 5,
+                     savePredictions=TRUE,
+                     summaryFunction = recallSummary,
+                     sampling = "up")
 ctrl$sampling <- "up"
 set.seed(7)
 tuneGrid_ranger <- data.table(expand.grid(mtry=c(round(sqrt(length(df_train_preproc)) + 1)
                                                  ), #standard choices for mtry
                               splitrule= 'gini',
-                              min.node.size=c(500, 700, 900)))
+                              min.node.size=c(500, 700, 1000)))
 
 ranger <- train(label~.,
                 data = df_train_preproc,
@@ -595,6 +581,10 @@ ranger <- train(label~.,
                 trControl = ctrl)
 
 ranger
+
+#summ2 <- rbind(summ2, ranger$results[1:3])
+#summ2$parameter[nrow(summ2)] <- "RF"
+#summ2
 ```
 
 ```{r}
@@ -605,6 +595,12 @@ Recall(df_test_preproc$label, mypred_ranger, positive = 1)
 
 
 Gradient Boosted Trees
+100, 3, e:   0.8447847  0.8411017
+200, 3, e:   0.8491741  0.8324347
+100, 5, e:   0.8614778  0.7801673
+100, 3, e, lambda 0.1: 0.8438514  0.8524467
+100, 3, e, l:0.1, b: 0.1: 0.8293706  0.8539473
+100, 3, e, l:0.13, b: 0.1:0.8284367  0.8503603
 
 ```{r}
 ctrl <- trainControl(method = "cv",
@@ -613,38 +609,26 @@ ctrl <- trainControl(method = "cv",
                      summaryFunction = recallSummary,
                      sampling = "up")
 
-tunegrid_deepbost <- expand.grid(num_iter = c(200, 500),
-                                 tree_depth = c(2, 3, 5))
+tunegrid_deepbost <- expand.grid(num_iter = c(100),
+                                 tree_depth = c(3),
+                                 beta = c(0.1),
+                                 lambda = 0.1,
+                                 loss_type = "e")
 
 boosting <- train(label~.,
                 data = df_train_preproc,
                 method = "deepboost",
                 tuneGrid = tunegrid_deepbost,
-                trControl = ctrl)
+                trControl = ctrl,
+                verbose = FALSE)
 
 boosting
 ```
 
-Adaboost
-```{r}
-ctrl <- trainControl(method = "cv",
-                     number = 5,
-                     savePredictions=TRUE,
-                     summaryFunction = recallSummary,
-                     sampling = "up")
-
-tunegrid_ada <- expand.grid(mfinal = c(100, 200, 500),
-                            maxdepth = c(2, 3, 5))
-
-adaboost <- train(label~.,
-                data = df_train_preproc,
-                method = "xgbTree",
-                tuneGrid = NULL,
-                trControl = ctrl)
-
-adaboost
-```
-
+Try:
+svmLinearWeights2 (loss!)
+'svmLinear3'
+regLogistic
 
 
 XGBoost
@@ -658,10 +642,10 @@ ctrl <- trainControl(method = "cv",
                      sampling = "up")
 
 tunegrid_xgb <- expand.grid(nrounds = c(100, 50),
-                       max_depth = c(10, 5),
+                       max_depth = c(5),
                        colsample_bytree = c(0.7),
-                       eta = c(0.1, 0.05),
-                       gamma = 0,
+                       eta = c(0.05, 0.03),
+                       gamma = c(0.1, 0.2),
                        min_child_weight = c(1),
                        subsample = 1
                       )
@@ -677,9 +661,32 @@ xgb
 ```
 
 
+
 ```{r}
 mypred_xgb <- predict(xgb, newdata = df_test_preproc)
 Accuracy(mypred_xgb, df_test_preproc$label)
 Recall(df_test_preproc$label, mypred_xgb, positive = 1)
 ```
 
+
+Logistic Regression with regularization
+```{r}
+ctrl$sampling <- "up"
+
+tuneGrid_reg = expand.grid(alpha = c(0, 0.5, 1),
+                                       lambda = c(0, 0.2, 0.5)) #alpha = 0 for Ridge and alpha = 1 for lasso
+
+log_reg <- train(label~.,
+                data = df_train_preproc,
+                method = 'glmnet',
+                family = "binomial",
+                trControl = ctrl,
+                tuneGrid = tuneGrid_reg)
+
+print(log_reg)
+
+summ2 <- rbind(summ2, log_log$results[1:3])
+summ2$parameter[nrow(summ2)] <- "Logistic Regularized"
+summ2
+```
+Regularization significantly worsens performance.
