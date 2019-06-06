@@ -15,7 +15,7 @@
 
 [Final_Report (pdf)](Final_Report.pdf)
 
-[Final_Report (rmd)](Final_Report.rmd)
+[Final_Report (rmd)](data/Final_Report.rmd)
 
 ## Shiny app
 
