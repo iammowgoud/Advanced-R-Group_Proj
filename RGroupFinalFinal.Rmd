@@ -1,15 +1,15 @@
 ---
-title: "FE & Modeling"
-output:
-  html_document:
-    df_print: paged
+title: "Bank Campaign Classification - Advanced R Group Project"
+author: "Group 1- Louis Dubaere, Hatem Hassan, Federico Loguercio, Alberto Lombatti, Gerald Walravens, Anwita Bhure"
+date: "6/6/2019"
+output: html_document
 ---
 
-```{r setup, echo=FALSE, warning=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, comment = NA, message = FALSE)
+
 rm(list=ls())
 
-# Install and load necessary libraries
 load_reqs <- function(reqs) {
   for(pkg in reqs) {
     if (!(pkg %in% installed.packages())) { install.packages(pkg) }
@@ -18,18 +18,23 @@ load_reqs <- function(reqs) {
 }
 
 # ADD LIBRARIES HERE
-load_reqs(c("tidyr", "dplyr", "data.table", "purrr", "ggplot2", "corrplot", 
-            "gridExtra", "grid", "cowplot", "doParallel", "caret", "MLmetrics", "DMwR",
-            "ROSE", "ranger", "xgboost", "deepboost"))
+load_reqs(c("dplyr", "data.table", "ggplot2", "corrplot", "gridExtra", "DT",
+            "grid", "doParallel", "caret", "MLmetrics", "DMwR", "car",
+            "ranger", "xgboost", "deepboost", "highcharter","purrr", "tidyr","cowplot"))
+
 ```
 
 ```{r echo=FALSE, warning=FALSE}
-# Load the data
-train <- read.csv('../data/BankCamp_train.csv')
-submission <- read.csv('../data/BankCamp_test.csv')
+# data import
+train <- read.csv('data/BankCamp_train.csv')
+submission <- read.csv('data/BankCamp_test.csv')
 ```
 
-### Visualization
+We are given a dataset that has information about whether a bank's customer responds positively to a marketing campaign and subscribes to a term deposit. The data has multiple variables of the customer, which can broadly be divided into three segments - Demographics, Transactional and Campaign-specific. 
+
+### Data Exploration
+
+We begin by undertaking basic quality and cosistency checks on the data.  
 
 #### Check if there are any missing values in the training set and the submission set
 
@@ -38,7 +43,7 @@ any(is.na(train))
 any(is.na(submission))
 ```
 
-**As both return FALSE, there are no missing values**
+**As both return FALSE, there are no missing values**  
 
 ***
 
@@ -48,25 +53,22 @@ glimpse(train)
 glimpse(submission)
 ```
 
-**Comparing to training set with the submission set, we can tell the target variable is y**
-
-***
-
-#### Check for the factor levels of y
-```{r echo=TRUE, warning=FALSE}
+```{r}
 unique(train$y)
 ```
 
-**As shown, it returns only yes and no, so it's a binary classification problem**
+**The target variable is recorded as y, a factor with two levels either yes or no. It is therefore a binary classification problem.**
 
 ***
+
+Before moving to modeling, we check the proportion of yes and no in the data.   
 
 #### Check for imbalance
 ```{r echo=TRUE, warning=FALSE}
 nrow(subset(train, y =='yes')) / nrow(train)
 ```
 
-**11%, resampling may be necessary to capture the target well**
+**Proportion of nos in the dataset is very low, ~11%. We may need to do resampling in order to get the right models.**   
 
 ***
 
@@ -132,7 +134,7 @@ corrplot.mixed(
 
 ***
 
-#### Numerical features with target
+#### Density Plots
 ```{r}
 numeric_vars <- unlist(lapply(train, is.numeric)) 
 histograms = list()
@@ -163,7 +165,7 @@ train$y <- NULL
 # split train data further into train and test (hold out)
 test_proportion <- 0.2
 set.seed(7)
-train_index<-sample(nrow(train), floor(nrow(train)*(1-test_proportion)), replace = FALSE)
+train_index <-sample(nrow(train), floor(nrow(train)*(1-test_proportion)), replace = FALSE)
 
 df_train <- train[train_index,]
 df_test <- train[-train_index,]
@@ -199,6 +201,8 @@ bsline
 
 The model performs poorly in terms of recall, probably due to the unbalanced target variable. This can be tackled by either undersampling the prevalent class or oversampling the rare class or both. 
 
+***
+
 ### Baseline with Resampling
 The target variable is highly unbalanced. We will therefore resample it in order try to make the model better capture the underrepresented class.
 
@@ -228,6 +232,7 @@ log_under
 This is a game changer. By simply undersampling, we are able to highly improve recall.
 
 Let's try oversampling instead:
+
 #### Oversampling
 ```{r}
 ctrl$sampling <- "up"
@@ -242,9 +247,7 @@ log_up <- train(label~.,
 log_up
 ```
 
-Using oversampling, the results are even better. Both recall and accuracy improve marginally.
-
-Next: "smote" and "rose" for sampling
+Next: "smote" for sampling
 
 #### SMOTE
 ```{r}
@@ -264,6 +267,7 @@ Smote resampling takes accuracy up but brings down recall substantially. SMOTE s
 
 ### Summary of all resampling results
 
+Make bootstrapping resample-versions of each model in order to estimate the distribution of recall and accuracy for each.
 ```{r}
 resample_models <- list(baseline = bsline,
                         undersampling = log_under,
@@ -283,12 +287,13 @@ for (i in 1:length(resample_models)) {
   summ2 <- rbind(summ2, res)
 }
 summ2$parameter <- names(resample_models)
-summ2
+datatable(summ2)
 ```
 
+***
 
-### Feature Engineering
-Now that we have established that resampling improves model results significantly, we will keep it as the base and move to feature selection and feature engineering. We use oversampling method. 
+### Variable Transformations
+Now that we have established that resampling improves model results significantly, we will keep it as the base and move to feature selection and feature engineering. We use undersampling method. 
 
 #### Day as a categorical variable  
 There is no numerical relevance to day of the month. Hence, it is converted as a factor. 
@@ -317,7 +322,7 @@ df_test_preproc <- train_preproc[-train_index,]
 ```
 
 ```{r}
-ctrl$sampling <- "up"
+ctrl$sampling <- "down"
 
 set.seed(7)
 log_agebin <- train(label~.,
@@ -333,7 +338,7 @@ log_agebin
 # update pipeline
 summ2 <- rbind(summ2, log_agebin$results[1:3])
 summ2$parameter[nrow(summ2)] <- "age binned"
-summ2
+datatable(summ2)
 ```
 
 The results after binning age improve slightly. We now move on to the next variable, jobs. 
@@ -376,7 +381,7 @@ log_agejobbin
 # update pipeline
 summ2 <- rbind(summ2, log_agejobbin$results[1:3])
 summ2$parameter[nrow(summ2)] <- "age & job binned"
-summ2
+datatable(summ2)
 ```
 
 The model recall decreases marginally. However, we can still go ahead with these two new features. 
@@ -413,18 +418,13 @@ log_bal
 # update pipeline
 summ2 <- rbind(summ2, log_bal$results[1:3])
 summ2$parameter[nrow(summ2)] <- "balance binned"
-summ2
+datatable(summ2)
 ```
 
 Binning balance improves accuracy and recall.  
 
 #### Modify Day Variable
 The day variable is categorical not, but that means that it has 31 different levels. It can be imagined that certain days of the month have a slight effect on the target but most do not hold any explanatory power.
-
-```{r}
-ggplot(train_preproc, aes(x = day, fill = label)) +
-  geom_bar(stat = "count", position = "fill")
-```
 
 It is reasonable to argue that the first and the last day of the month are somewhat special. We group them together and put the rest into one category.
 
@@ -453,10 +453,37 @@ log_day_binned
 ```{r}
 summ2 <- rbind(summ2, log_day_binned$results[1:3])
 summ2$parameter[nrow(summ2)] <- "Day binned"
-summ2
+datatable(summ2)
 ```
 
 Model performance goes down but we are significantly reducing the number of variables which will shorten runtimes.
+
+### pday binned
+```{r}
+train_preproc$pdays_binned <- cut(train_preproc$pdays, breaks = c(-Inf, 0, 99, 299, 499, Inf ),
+                                  labels = c("notcontacted", "0-100", "101-300", "301-500", ">500"))
+train_preproc$pdays <- NULL
+
+df_train_preproc <- train_preproc[train_index,]
+df_test_preproc <- train_preproc[-train_index,]
+```
+
+```{r}
+log_pday_binned <- train(label~.,
+                 data = df_train_preproc,
+                 method = 'glm',
+                 family = "binomial",
+                 trControl = ctrl)
+
+log_pday_binned
+```
+
+```{r}
+summ2 <- rbind(summ2, log_pday_binned$results[1:3])
+summ2$parameter[nrow(summ2)] <- "PDays binned"
+datatable(summ2)
+```
+
 
 #### Redesigning how numeric variables are modelled
 
@@ -465,7 +492,7 @@ We now fit the model again, however, adding in Yeo-Johnson through preprocessing
 The Yeo-Johnson transformation is a variant of the BoxCox Transformation suited for variables with non-positive values. Variables are transformed to a more normal-like distribution with more stable variance.
 
 ```{r}
-ctrl$sampling <- "up"
+ctrl$sampling <- "down"
 
 log_yj <- train(label~.,
                 data = df_train,
@@ -482,7 +509,7 @@ The results remain mostly unchanged.
 # update pipeline
 summ2 <- rbind(summ2, log_yj$results[1:3])
 summ2$parameter[nrow(summ2)] <- "Yeo-Johnson"
-summ2
+datatable(summ2)
 ```
 
 The Yeo-Johnson transformation does not appear to help with fixing skewness and outlier issues in certain variables.
@@ -499,15 +526,14 @@ to_log <- function(df, l_varlist){
 }
 
 # Select the numeric variables that are skewed
-log_varlist <- list('duration', 'campaign', 'pdays', 'previous')
+log_varlist <- list('duration', 'campaign', 'previous')
 
 train_log <- train_preproc
 
 # Add constant in order to avoid non-positive values in log (monotonic transformation)
 train_log$duration <- train_log$duration + 1
-train_log$pdays <- train_log$pdays + 2
+
 train_log$previous <- train_log$previous + 1
-#train_log$balance <- train_log$balance + 10000
 
 train_log <- to_log(train_log, log_varlist)
 
@@ -526,7 +552,7 @@ print(logarithm)
 
 summ2 <- rbind(summ2, logarithm$results[1:3])
 summ2$parameter[nrow(summ2)] <- "Logarithm"
-summ2
+datatable(summ2)
 ```
 
 #### Parallelize
@@ -536,21 +562,22 @@ registerDoParallel(cl)
 # All subsequent models are run in parallel
 ```
 
+***
+
 ## Optimization
 Different models & hyperparameter tuning
 
 ### Random Forest
 ```{r}
 set.seed(7)
-ctrl$sampling <- "down"
 # Several grids were explored, adapting the parameters in the direction where performance was improving.
 # For faster runtimes, only a small grid is ran.
-tuneGrid_ranger <- data.table(expand.grid(mtry=c(round(sqrt(length(df_train_preproc)) + 1),
-                                                 round(sqrt(length(df_train_preproc)) +1)
+tuneGrid_ranger <- data.table(expand.grid(mtry=c(round(sqrt(length(df_train_preproc)) + 2),
+                                                 round(1/2 * (length(df_train_preproc))),
+                                                 round(2/3 * (length(df_train_preproc)))
                                                  ), #standard choices for mtry
                               splitrule= 'gini',
-                              min.node.size=c(40, 100, 200)))
-# We found that very large values for min.node.size lead to the highest recall. Lower values optimize
+                              min.node.size=c(200, 300, 500))) # We found that very large values for min.node.size lead to the highest recall. Lower values optimize
 # accuracy at the cost of recall.
 
 ranger <- train(label~.,
@@ -563,9 +590,11 @@ ranger <- train(label~.,
 
 ranger
 
-#summ2 <- rbind(summ2, ranger$results[1:3])
-#summ2$parameter[nrow(summ2)] <- "RF"
-#summ2
+o1 <- data.frame(ranger$results[7,3:5])
+names(o1) <- c("parameter", "Accuracy", "recall")
+summ2 <- rbind(summ2, o1)
+summ2$parameter[nrow(summ2)] <- "Random Forest"
+datatable(summ2)
 ```
 
 Calculate test set performance
@@ -596,6 +625,12 @@ boosting <- train(label~.,
                 verbose = FALSE)
 
 boosting
+
+o2 <- data.frame(boosting$results[1,5:7])
+names(o2) <- c("parameter", "Accuracy", "recall")
+summ2 <- rbind(summ2, o2)
+summ2$parameter[nrow(summ2)] <- "Boosting"
+datatable(summ2)
 ```
 
 Deepboost is not able to reach the levels of recall obtained with the random forest.
@@ -605,14 +640,13 @@ Deepboost is not able to reach the levels of recall obtained with the random for
 
 ```{r}
 set.seed(7)
-ctrl$sampling = "down"
 
-tunegrid_xgb <- expand.grid(nrounds = c(100),
+tunegrid_xgb <- expand.grid(nrounds = c(100, 80),
                        max_depth = c(5),
                        colsample_bytree = c(0.7),
-                       eta = c(0.1),
-                       gamma = c(0),
-                       min_child_weight = c(1, 5, 25),
+                       eta = c(0.05),
+                       gamma = c(0.1, 0.2),
+                       min_child_weight = c(1),
                        subsample = 1
                       )
 
@@ -624,6 +658,12 @@ xgb <- train(label~.,
                 trControl = ctrl)
 
 xgb
+
+o3 <- data.frame(xgb$results[4,7:9])
+names(o3) <- c("parameter", "Accuracy", "recall")
+summ2 <- rbind(summ2, o3)
+summ2$parameter[nrow(summ2)] <- "XGBoost"
+datatable(summ2)
 ```
 
 XGBoost performs quite well but still worse than random forest.
@@ -651,20 +691,33 @@ log_reg <- train(label~.,
 
 print(log_reg)
 
-#summ2 <- rbind(summ2, log_log$results[1:3])
-#summ2$parameter[nrow(summ2)] <- "Logistic Regularized"
-#summ2
+o4 <- data.frame(log_reg$results[1,2:4])
+names(o4) <- c("parameter", "Accuracy", "recall")
+summ2 <- rbind(summ2, o4)
+summ2$parameter[nrow(summ2)] <- "Logistic with Regularizations"
+datatable(summ2)
 ```
 Regularization significantly worsens performance.
 
 
+
+```{r, include = F}
+# These section are not included in the presentation
+
 ### XGBoost optimized for lift
 
-One last iteration was tried. Unfortunatly, caret does not allow for modification of the loss function. Ideally, we would want a cost function that highly penalizes false negatives, more so than false positives.
+# One last iteration was tried. Unfortunatly, caret does not allow for modification of the loss function. Ideally, we would want a cost function that highly penalizes false negatives, more so than false positives.
+# 
+# XGBoost allows for a custom evaluation function that goes a bit further than the custom evaluation function in caret. While we can not modify the loss function, the number of iterations can be more closely optimized for left hand side lift.
 
-XGBoost allows for a custom evaluation function that goes a bit further than the custom evaluation function in caret. While we can not modify the loss function, the evaluation metric can be set 
 
-```{r}
+
+# Credit for this approach goes to:
+# https://minimizeregret.com/post/2017/04/14/cost-sensitive-xgboost/
+# whose code was closely replicated.
+
+# We begin by building a lift-metric. We create a simulated profit which takes into account lost opportunity (simplified, of course there also is a cost for making the phone call, for false positives). Thereafter, lift being the improvement in profit compared to random calling is calculated. We use that metric for evaluation.
+
 xgb_params <- list(objective = "binary:logistic",
                    eta = 0.05,
                    max_depth = 15,
@@ -704,12 +757,14 @@ xgb.getLift <- function(preds, data) {
     return(list(metric = "Lift", value = lift))
 }
 
-df_train_resampled <- upSample(x = df_train_preproc[, -13],
+# Resamle outside since we are not using caret
+df_train_resampled <- upSample(x = df_train_preproc[, -12],
                      y = df_train_preproc$label)    
 df_test_notresampled <- df_test_preproc
 df_test_notresampled$Class <- df_test_notresampled$label
 df_test_notresampled$label <- NULL
 
+# Need to create matrix object for ranger
 datamatrix <- model.matrix(Class~., data = df_train_resampled)[, -1]
 y <- as.numeric(df_train_resampled$Class) - 1
 testdatamatrix <- model.matrix(Class~., data = df_test_notresampled)[, -1]
@@ -722,7 +777,7 @@ xgb_fit <- xgb.cv(params = xgb_params, data = datamatrix, label = y, nfold = 5,
 ```
 
 
-```{r}
+```{r, include = F}
 xgb_pred<- xgb.train(params = xgb_params, data = xgb.DMatrix(data = datamatrix, label = y),
                   feval = xgb.getLift, maximize = TRUE, 
                   nrounds = 500, early_stopping_rounds = 50,
@@ -730,18 +785,21 @@ xgb_pred<- xgb.train(params = xgb_params, data = xgb.DMatrix(data = datamatrix, 
                   verbose = TRUE, print_every_n = 100)
 ```
 
-```{r}
+```{r, include = F}
 temp_prob <- predict(xgb_pred, newdata = xgb.DMatrix(data = testdatamatrix, label = ytest), 
                       type = 'response')
 temp_preds <- ifelse(temp_prob >= 0.5, 1, 0)
 Accuracy(temp_preds, ytest)
 Recall(ytest, temp_preds, positive = 1)
+
+# We do not further optimize this poor result, the last variable transformation significantly worsened performance and it never performed as well as the random forest.
 ```
 
+***
 
 ## Final Prediction
 
-```{r}
+```{r echo=F, include=F}
 # Prepare submission dataset
 
 submission$day <- as.factor(submission$day)
@@ -764,11 +822,15 @@ submission$day_binned <- car::recode(submission$day, "c(1,30) = 'special';
                         c(2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,
                                         22,23,24,25,26,27,28,29,31) = 'others'")
 submission$day_binned <- factor(submission$day_binned)
+submission$pdays_binned <- cut(submission$pdays, breaks = c(-Inf, 0, 99, 299, 499, Inf ),
+                                  labels = c("notcontacted", "0-100", "101-300", "301-500", ">500"))
+submission$pdays <- NULL
+
 submission$day <- NULL
 submission_log <- submission
 # Add constant in order to avoid non-positive values in log (monotonic transformation)
 submission_log$duration <- submission_log$duration + 1
-submission_log$pdays <- submission_log$pdays + 2
+#submission_log$pdays <- submission_log$pdays + 2
 submission_log$previous <- submission_log$previous + 1
 
 submission_log <- to_log(submission_log, log_varlist)
@@ -779,14 +841,14 @@ submission <- submission_log
 
 Make the final prediction on the submission set
 ```{r}
-ranger_finalGrid <- expand.grid(mtry=round(sqrt(length(df_train_preproc)) + 1),
+ranger_finalGrid <- expand.grid(mtry=round(1/2 * (length(df_train_preproc))),
                               splitrule= 'gini',
-                              min.node.size=500)
+                              min.node.size=200)
 set.seed(7)
 
 ranger_final <- train(label~.,
-                data = train_preproc,
-                method = "ranger", num.trees=100,
+                data = train_log,
+                method = "ranger", num.trees=500,
                 tuneGrid = ranger_finalGrid,
                 metric = "recall",
                 importance = "permutation",
@@ -795,4 +857,6 @@ ranger_final <- train(label~.,
 final_pred <- predict(ranger_final, newdata = submission)
 ```
 
-
+```{r}
+#write.csv(final_pred, "/Users/federicologuercio/Desktop/final_preds.csv")
+```
