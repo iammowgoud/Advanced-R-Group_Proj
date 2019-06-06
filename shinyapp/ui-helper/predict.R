@@ -25,15 +25,15 @@ log_varlist <- list('duration', 'campaign', 'previous')
 
 
 predict_data <- function(submission) {
+  
+
   ## train data
   library(rstudioapi)
   
-  # Getting the path of your current open file
-  current_path = rstudioapi::getActiveDocumentContext()$path 
-  setwd(dirname(current_path ))
-
   df_train_preproc <- read.csv("train_preproc.csv")
 
+  temp <- df_train_preproc
+  
   df_train_preproc$X = NULL
   
   df_train_preproc$label <- as.factor(df_train_preproc$label)
@@ -109,13 +109,17 @@ predict_data <- function(submission) {
                         importance = "permutation",
                         trControl = ctrl)
 
-  # final_pred <- predict(ranger_final, data = submission)
-  # return(final_pred)
+  final_pred <- predict(ranger_final, data = submission)
+  
+  
+  temp$LABEL <- as.factor(ifelse(final_pred == 1, 'yes', 'no'))
+
+  return(temp)
 }
 
+# 
+# input_data =  readr::read_csv("/Users/tommy/git/IE/TERM-3/Advanced R/repo/data/BankCamp_test.csv")
+# 
+# prediction = predict_data(input_data)
+# 
 
-input_data =  readr::read_csv("/Users/tommy/git/IE/TERM-3/Advanced R/repo/data/BankCamp_test.csv")
-
-prediction = predict_data(input_data)
-
-prediction

@@ -26,8 +26,9 @@ ui <- dashboardPage(
                            icon = icon('th'))
                ),
       
-      menuItem("Data Modeling", tabName = "modelling", icon = icon("puzzle-piece"))
-      
+      menuItem("Data Modeling", tabName = "modelling", icon = icon("puzzle-piece")),
+      menuItem(tags$em("Upload Test Data",style="font-size:120%"),icon=icon("upload"),tabName="data"),
+      menuItem(tags$em("Download Predictions",style="font-size:120%"),icon=icon("download"),tabName="download")
     )
   ),
   dashboardBody(
@@ -137,14 +138,6 @@ ui <- dashboardPage(
               br(),
               br(),
               br(),
-              tags$h4("With this shiny prediction app, you can upload your data and get back predictions.
-                      The model is a Regularized Logistic Regression that predicts whether microchips from a 
-                      fabrication plant passes quality assurance (QA). During QA, each microchip goes through various 
-                      tests to ensure it is functioning correctly. Suppose you are the product manager of the 
-                      factory and you have the test results for some microchips on two different tests. 
-                      From these two tests, you would like to determine whether the microchips should be accepted or rejected.", style="font-size:150%"),
-              
-              
               br(),
               
               tags$h4("To predict using this model, upload test data in csv format (you can change the code to read other data types) by using the button below.", style="font-size:150%"),
@@ -188,14 +181,16 @@ ui <- dashboardPage(
                             )),
                           fluidRow(
                             
-                            column(width = 7,
-                            downloadButton("downloadData", em('Download Predictions',style="text-align:center;color:blue;font-size:150%")),
-                            plotOutput('plot_predictions')
-                            ),
                             column(width = 4,
-                            uiOutput("sample_prediction_heading"),
-                            tableOutput("sample_predictions")
+                            downloadButton("downloadData", em('Download Predictions',style="text-align:center;color:blue;font-size:150%"))
+  
                             )
                               
-                            ))
+                            ),
+              column(width = 12,
+                     uiOutput("sample_prediction_heading"),
+                     tableOutput("sample_predictions")
+              )
+              
+              )
                           )))

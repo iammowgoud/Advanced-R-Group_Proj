@@ -1,5 +1,6 @@
 # shiny server
 source("helpers.R") # data import and most of the preparation is performed in a separate helpers file
+source("ui-helper/predict.R") 
 
 function (input, output) {   # session is included for using shinyjs functionalities
   
@@ -187,7 +188,7 @@ function (input, output) {   # session is included for using shinyjs functionali
       withProgress(message = 'Predictions in progress. Please wait ...', {
         input_data =  readr::read_csv(input$file1$datapath, col_names = TRUE)
         
-        prediction = predict(input_data)
+        prediction = predict_data(input_data)
 
         prediction
         
@@ -207,19 +208,12 @@ function (input, output) {   # session is included for using shinyjs functionali
   })
   
   output$sample_predictions = renderTable({   # the last 6 rows to show
-    pred = predictions()
+    pred <- predictions()
     head(pred)
     
   })
   
-  
-  output$plot_predictions = renderPlot({   # the last 6 rows to show
-    pred = predictions()
-    cols <- c("Failed" = "red","Passed" = "blue")
-    ggplot(pred, aes(x = Test1, y = Test2, color = factor(prediction))) + geom_point(size = 4, shape = 19, alpha = 0.6) +
-      scale_colour_manual(values = cols,labels = c("Failed", "Passed"),name="Test Result")
-    
-  })
+
   
   
   # Downloadable csv of predictions ----
