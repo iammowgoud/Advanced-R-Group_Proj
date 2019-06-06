@@ -17,13 +17,35 @@ ui <- dashboardPage(
   dashboardHeader(title = "Campaign Dashboard", titleWidth = 300),
   dashboardSidebar(
     sidebarMenu(width = 300,
-      menuItem("Know the Data", tabName = "data", icon = icon("database")),
+      menuItem("Know the Data", tabName = "data", icon = icon("line-chart"),
+               menuSubItem('Variables',
+                           tabName = 'vars',
+                           icon = icon('line-chart')),
+               menuSubItem('Correlation',
+                           tabName = 'corr',
+                           icon = icon('th'))
+               ),
+      
       menuItem("Data Modeling", tabName = "modelling", icon = icon("puzzle-piece")),
       menuItem("Predictions", tabName = "input", icon = icon("play-circle"))
     )
   ),
   dashboardBody(
+    tags$head(tags$script('
+        $(document).on("shiny:sessioninitialized", function(event) {
+                          $(\'a[data-value="vars"]\').tab("show");
+                          $(\'ul.treeview-menu\').show();
+                          $(\'li.treeview\').toggleClass("active");
+                          });
+                          ')),
     tags$head(tags$style(HTML('
+                              .sidebar-menu li>a>.fa-angle-left {
+                               transform: rotate(180deg)
+                              }
+                              .sidebar-menu li.active>a>.fa-angle-left {
+                                 top: 10%;
+                                right: 0px;
+                              }
                               .sidebar > ul > li> a i{
                               width: 45px !important;
                               font-size: 18px;
@@ -40,12 +62,12 @@ ui <- dashboardPage(
                               }
                               .main-header .logo {
                                 font-weight: bold;
-
                               }
                               '))),
     tabItems(
-      # Know the Data tab content
-      tabItem(tabName = "data",
+      # Know the Data
+      # Variables tab content
+      tabItem(tabName = "vars",
               fluidRow(
                 box(
                   width = 8,
@@ -66,6 +88,12 @@ ui <- dashboardPage(
                 box(highchartOutput("highchart"))
               )
               ),
+      
+      # correlation tab content
+      tabItem(tabName = "corr",
+              fluidRow(
+              )
+      ),
       
       # Data Modelling tab
       tabItem(tabName = "modelling",

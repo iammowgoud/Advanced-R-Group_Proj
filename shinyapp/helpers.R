@@ -1,6 +1,5 @@
 train <- read.csv("../data/BankCamp_train.csv")
 
-
 eda_data <- as.data.table(train)
 eda_data$label <- as.factor(ifelse(eda_data$y == 'yes', 1, 0))
 eda_data$label_edit <- as.factor(ifelse(eda_data$y == 'yes', "Yes", "No"))
