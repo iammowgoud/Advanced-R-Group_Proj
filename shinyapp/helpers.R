@@ -156,6 +156,23 @@ eda_data_poutcome <- eda_data %>%
 plot_poutcome <- hciconarray(names_counts(eda_data_poutcome)$names, round(names_counts(eda_data_poutcome)$counts / 500), size = 5) %>%
   hc_title(text = "Poutcome Distribution(1 unit = 500 Clients)")
 
+# corr matrix
+# fntltp <- JS("function(){
+#              return this.series.xAxis.categories[this.point.x] + ' ' +  this.series.yAxis.categories[this.point.y] + ':<br>' +
+#              Highcharts.numberFormat(this.point.value, 2);
+#              }")
+# 
+# corr_matrix < - hchart(res_l, "heatmap", hcaes(x = Var1, y = Var2, value = value)) %>% 
+#   hc_colorAxis(minColor="#8EDBFF", maxColor="#8296FF") %>% 
+#   hc_yAxis(reversed = TRUE, offset = 0, tickLength = 0,
+#            gridLineWidth = 0, minorGridLineWidth = 0,
+#            labels = list(style = list(fontSize = "8px"))) %>% 
+#   hc_tooltip(formatter = fntltp) %>% 
+#   hc_title(text = "Correlation Matrix") %>% 
+#   hc_legend(layout = "vertical", verticalAlign = "top",
+#             align = "right", valueDecimals = 0) %>%
+#   hc_add_theme(hc_theme_monokai())
+
 # LOAD PREVIOUSLY FIT MODELS
 log_up_r <- readRDS("log_up.rds")
 ranger_r <- readRDS("ranger.rds")
