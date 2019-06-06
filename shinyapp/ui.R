@@ -17,18 +17,18 @@ ui <- dashboardPage(
   dashboardHeader(title = "Campaign Dashboard", titleWidth = 300),
   dashboardSidebar(
     sidebarMenu(width = 300,
-      menuItem("Know the Data", tabName = "data", icon = icon("database"),
-               menuSubItem('Variables',
-                           tabName = 'vars',
-                           icon = icon('line-chart')),
-               menuSubItem('Correlation',
-                           tabName = 'corr',
-                           icon = icon('th'))
-               ),
-      
-      menuItem("Data Modeling", tabName = "modelling", icon = icon("puzzle-piece")),
-      menuItem(tags$em("Upload Test Data",style="font-size:120%"),icon=icon("upload"),tabName="data"),
-      menuItem(tags$em("Download Predictions",style="font-size:120%"),icon=icon("download"),tabName="download")
+                menuItem("Know the Data", tabName = "data", icon = icon("database"),
+                         menuSubItem('Variables',
+                                     tabName = 'vars',
+                                     icon = icon('line-chart')),
+                         menuSubItem('Correlation',
+                                     tabName = 'corr',
+                                     icon = icon('th'))
+                ),
+                
+                menuItem("Data Modeling", tabName = "modelling", icon = icon("puzzle-piece")),
+                menuItem(tags$em("Upload Test Data",style="font-size:120%"),icon=icon("upload"),tabName="data"),
+                menuItem(tags$em("Download Predictions",style="font-size:120%"),icon=icon("download"),tabName="download")
     )
   ),
   dashboardBody(
@@ -92,7 +92,7 @@ ui <- dashboardPage(
                 box(plotlyOutput("histogram")),
                 box(highchartOutput("highchart"))
               )
-              ),
+      ),
       
       # correlation tab content
       tabItem(tabName = "corr",
@@ -104,21 +104,21 @@ ui <- dashboardPage(
       # Data Modelling tab
       tabItem(tabName = "modelling",
               fluidRow(
-              box(
+                box(
                   width = 4,
                   title = "Choose the model",
                   radioButtons(inputId= "modelradio","Select the Model",
                                choices=c("Logistic Regression", "Random Forest"), 
                                selected = "Random Forest")
                 ),
-              # Dynamic valueBoxes
-              valueBoxOutput("accbox", width = 4),
-              valueBoxOutput("recallbox", width = 4)
-              # box(width = 12,
-              #     title = "Model Summary",
-              #     verbatimTextOutput("summary")
-              # )
-              
+                # Dynamic valueBoxes
+                valueBoxOutput("accbox", width = 4),
+                valueBoxOutput("recallbox", width = 4)
+                # box(width = 12,
+                #     title = "Model Summary",
+                #     verbatimTextOutput("summary")
+                # )
+                
               ),
               fluidRow(
                 box(width = 7,
@@ -163,7 +163,7 @@ ui <- dashboardPage(
               ),
               br()
               
-              ),
+      ),
       
       
       tabItem(tabName="download",
@@ -175,22 +175,22 @@ ui <- dashboardPage(
                 column(width = 8,
                        tags$h4("After you upload a test dataset, you can download the predictions in csv format by
                                clicking the button below.", 
-                                    style="font-size:200%"),
-                            br(),
-                            br()
-                            )),
-                          fluidRow(
-                            
-                            column(width = 4,
-                            downloadButton("downloadData", em('Download Predictions',style="text-align:center;color:blue;font-size:150%"))
-  
-                            )
-                              
-                            ),
+                               style="font-size:200%"),
+                       br(),
+                       br()
+                )),
+              fluidRow(
+                
+                column(width = 4,
+                       downloadButton("downloadData", em('Download Predictions',style="text-align:center;color:blue;font-size:150%"))
+                       
+                )
+                
+              ),
               column(width = 12,
                      uiOutput("sample_prediction_heading"),
                      tableOutput("sample_predictions")
               )
               
-              )
-                          )))
+      )
+    )))

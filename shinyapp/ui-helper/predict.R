@@ -26,13 +26,14 @@ log_varlist <- list('duration', 'campaign', 'previous')
 
 predict_data <- function(submission) {
   
-
+  temp <- submission
+  
   ## train data
   library(rstudioapi)
   
   df_train_preproc <- read.csv("train_preproc.csv")
 
-  temp <- df_train_preproc
+
   
   df_train_preproc$X = NULL
   
@@ -110,16 +111,16 @@ predict_data <- function(submission) {
                         trControl = ctrl)
 
   final_pred <- predict(ranger_final, data = submission)
-  
-  
-  temp$LABEL <- as.factor(ifelse(final_pred == 1, 'yes', 'no'))
 
+
+  temp <- as.factor(ifelse(final_pred == 1, 'yes', 'no'))
+  
   return(temp)
 }
 
-# 
+
 # input_data =  readr::read_csv("/Users/tommy/git/IE/TERM-3/Advanced R/repo/data/BankCamp_test.csv")
 # 
 # prediction = predict_data(input_data)
 # 
-
+# 

@@ -1,18 +1,22 @@
 # Advanced-R-Group_Proj
 
-## Timeline and work division
+## Github Repo
 
-### 15th of May: data exploration deadline - Scott & Hatem
+[https://github.com/iammowgoud/Advanced-R-Group_Proj](https://github.com/iammowgoud/Advanced-R-Group_Proj)
 
-- Data Viz
-  - Plot histograms for each variable - Scott - _**Done**_
-  - Plot correlation Matrix - Hatem - _**Done**_
-- Data prep - Hatem - _**Pending**_
+## Final report
 
-### 22nd of May: modelling deadline - Federico & Anwita
+[Final_Report (html)](final_report.html)
 
-### 29th of May: visualization + shiny - Alberto, Gerald & Louis
+[Final_Report (pdf)](final_report.pdf)
 
-***
+## Shiny app instructions
 
-### 6th of June: presentation
+Open ```/shinyapp/server.R``` in R Studio and click on Run App
+
+
+## Detailed notebooks
+
+ ```/EDA/```
+
+  ```/FE _ Modeling/```
