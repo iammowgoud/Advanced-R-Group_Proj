@@ -1,7 +1,7 @@
 # Bank Campaign Classification - Advanced R Group Project
 
 **Group 1: Louis Dubaere, Hatem Hassan, Federico Loguercio, Alberto Lombatti, Gerald Walravens, Anwita Bhure**
-
+Hola Chicos!
 ## Github Repo
 
 [https://github.com/iammowgoud/Advanced-R-Group_Proj](https://github.com/iammowgoud/Advanced-R-Group_Proj)
